@@ -137,6 +137,36 @@ google_sheet_key = "1GuqpdVRx8_KdI7LfmwNBEsV..."
    terraform apply -var-file="terraform.tfvars"
    ```
 
+#### Workflow diagram once terraform apply is used
+```
+(Local machine)
+       |
+       v
+1. [terraform apply] -> Reads `main.tf` and `main.py`
+       |
+       v
+2. [archive_file] -> Zips `main.py` into `lambda_function.zip`
+       |
+       v
+3. [aws_iam_role / aws_iam_policy] -> Creates the Role (Identity) and Policy (Permissions) in AWS
+       |
+       v
+4. [aws_lambda_function] -> Creates the function in AWS by:
+       |                      - Uploading the .zip file
+       |                      - Attaching the IAM Role
+       |                      - Attaching the Layer (gspread_layer_arn)
+       |                      - Setting Environment Variables (Sheet Key, Secret ARN)
+       |
+       v
+5. [aws_cloudwatch_event_rule] -> Creates the schedule (Cron: "Wed @ 11 AM CST")
+       |
+       v
+6. [aws_cloudwatch_event_target] -> Connects the Schedule to the Lambda
+       |
+       v
+(Deployment Complete in AWS)
+```
+
 ### Part 5: Test the function
 1. Go to the **AWS Lambda Console** and find the created function (`gsheet-ec2-rightsizing-reporter`).
 2. Go to the **Test** tab, create a new test event and click on **Test** to test the function.
