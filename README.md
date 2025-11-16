@@ -10,8 +10,8 @@ This repository contains boto3 code to help identify underutilized EC2 instances
 * Boto3 library installed: pip install boto3
 * AWS Credentials configured: Your environment (local machine or AWS Lambda) must have the necessary AWS credentials configured, for example, via aws configure or an IAM Role
 * IAM Permissions: The principal/user running this script will at least need the following permissions:
-  * ec2:DescribeInstances (Gets a detailed list of all EC2 instances and their properties (like their `ID`, `type`, and `tags`) - Used in Line 51
-  * ec2:DescribeRegions (Gets a list of all available AWS regions (like `us-east-1`, `us-west-2`, etc) - Used in Line 56
-  * cloudwatch:GetMetricData (Gets performance metrics like `CPUUtilization`) - Used in ine 85
+  * ec2:DescribeInstances (Gets a detailed list of all EC2 instances and their properties (like their `ID`, `type`, and `tags`)
+  * ec2:DescribeRegions (Gets a list of all available AWS regions (like `us-east-1`, `us-west-2`, etc)
+  * cloudwatch:GetMetricData (Gets performance metrics like `CPUUtilization`)
  
 
