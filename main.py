@@ -1,17 +1,18 @@
 import boto3
 import collections
 import os
-import gspread  # This library comes from the Lambda Layer
+import gspread 
 import gspread.utils 
 import json
-from google.oauth2.service_account import Credentials # From Layer
+from gspread_formatting import *
+from google.oauth2.service_account import Credentials
 from datetime import datetime, timedelta, timezone
 
 # --- Configuration ---
 REPORTING_PERIOD_DAYS = 30
 CPU_THRESHOLD = 20
 CPU_CREDIT_THRESHOLD = 100
-IGNORE_SIZES = ['small', 'micro', 'nano']
+IGNORE_SIZES = ['small', 'micro', 'nano']           #Consider size medium or higher
 
 # --- Environment Variables (Will be set by Terraform) ---
 SHEET_KEY = os.environ['GOOGLE_SHEET_KEY'] 
@@ -36,14 +37,17 @@ def authenticate_gspread():
     return gc
 
 def write_to_sheet(gc, report_data):
+    """Writes the report data to a new, dated sheet and formats it as a table."""
     try:
         sh = gc.open_by_key(SHEET_KEY)
+        
         sheet_name = datetime.now(timezone.utc).strftime("%m/%d/%y")
+        
         print(f"Creating new worksheet named: {sheet_name}")
-        worksheet = sh.add_worksheet(title=sheet_name, rows=100, cols=20)
+        worksheet = sh.add_worksheet(title=sheet_name, rows=1, cols=1)
         
         if not report_data:
-            worksheet.update('A1', [["No underutilized instances found."]]) # Fixed format
+            worksheet.update('A1', [["No underutilized instances found."]]) 
             print("No underutilized instances found.")
             return
 
@@ -52,26 +56,59 @@ def write_to_sheet(gc, report_data):
         values = [list(d.values()) for d in report_data]
         full_data_list = [headers] + values
         
+        num_rows = len(full_data_list)
+        num_cols = len(headers)
+        
+        worksheet.resize(rows=num_rows, cols=num_cols)
         worksheet.update('A1', full_data_list, value_input_option='USER_ENTERED')
         print(f"Successfully wrote {len(report_data)} rows to sheet '{sheet_name}'.")
 
-        # --- Formatting Section ---
+        # --- FORMATTING SECTION ---
         print("Applying table formatting...")
-        num_rows = len(full_data_list)
-        num_cols = len(headers)
+
+        # 1. Define Formats
+        HEADER_BACKGROUND_COLOR = Color(0.9, 0.9, 0.9) # Light gray
+        ALT_ROW_COLOR = Color(0.95, 0.95, 0.95)         # Lighter gray
+        
+        header_format = CellFormat(
+            backgroundColor=HEADER_BACKGROUND_COLOR,
+            textFormat=TextFormat(bold=True),
+            horizontalAlignment='CENTER'
+        )
+        
+        border = Border("SOLID", Color(0, 0, 0)) # Black, solid border
+        all_cells_base_format = CellFormat(borders=Borders(top=border, bottom=border, left=border, right=border))
+
+        # 2. Apply Header and Border Formats
         end_cell = gspread.utils.rowcol_to_a1(num_rows, num_cols)
         header_end_cell = gspread.utils.rowcol_to_a1(1, num_cols)
         data_range = f"A1:{end_cell}"
+        
+        # --- THIS IS THE FIX ---
+        # Use format_cell_range for the header, not worksheet.format
+        format_cell_range(worksheet, f"A1:{header_end_cell}", header_format)
+        # --- END OF FIX ---
 
-        header_format = {"backgroundColor": {"red": 0.9, "green": 0.9, "blue": 0.9}, "horizontalAlignment": "CENTER", "textFormat": {"bold": True}}
-        all_cells_format = {"borders": {"top": {"style": "SOLID_MEDIUM"}, "bottom": {"style": "SOLID_MEDIUM"}, "left": {"style": "SOLID_MEDIUM"}, "right": {"style": "SOLID_MEDIUM"}}}
-        
-        worksheet.format(f"A1:{header_end_cell}", header_format)
-        worksheet.format(data_range, all_cells_format)
-        
-        body = {"requests": [{"autoResizeDimensions": {"dimensions": {"sheetId": worksheet.id, "dimension": "COLUMNS", "startIndex": 0, "endIndex": num_cols}}}]}
-        sh.batch_update(body)
-        print("Applied formatting and auto-resized columns.")
+        format_cell_range(worksheet, data_range, all_cells_base_format)
+
+        # 3. Apply Alternating Row Colors
+        for i in range(2, num_rows + 1): # Start from row 2 (data)
+            if i % 2 == 0: # Even-numbered rows
+                row_range = f"A{i}:{gspread.utils.rowcol_to_a1(i, num_cols)}"
+                format_cell_range(worksheet, row_range, CellFormat(backgroundColor=ALT_ROW_COLOR))
+
+        # 4. Set Column Widths (Example widths, adjust as needed)
+        set_column_widths(worksheet, [
+            ('A', 150), # InstanceId
+            ('B', 200), # InstanceName
+            ('C', 120), # Region
+            ('D', 120), # InstanceType
+            ('E', 80),  # AvgCPU
+            ('F', 100), # AvgCPUCredits
+            ('G', 200)  # Recommendation
+        ])
+
+        print("Applied all formatting.")
 
     except gspread.exceptions.APIError as e:
         if "already exists" in str(e):
@@ -86,7 +123,7 @@ def write_to_sheet(gc, report_data):
 # --- AWS Functions ---
 
 def get_recommendation(instance_type):
-    # This map is now the only place that controls downsizing.
+    # This map controls downsizing.
     # We will not recommend a size smaller than 'small'.
     size_map = {
         '32xlarge': '24xlarge', '24xlarge': '16xlarge',
@@ -135,9 +172,6 @@ def get_running_instances():
             print(f"Skipping region {region}: {str(e)}")
     return instances
 
-# -----------------------------------------------------------------
-# UPDATED FUNCTION: get_instance_metrics
-# -----------------------------------------------------------------
 def get_instance_metrics(instance_id, region):
     cw = boto3.client('cloudwatch', region_name=region)
     end = datetime.now(timezone.utc)
@@ -167,9 +201,6 @@ def get_instance_metrics(instance_id, region):
         
     return metrics
 
-# -----------------------------------------------------------------
-# UPDATED FUNCTION: generate_report
-# -----------------------------------------------------------------
 def generate_report(instances):
     data = []
     for region, inst_list in instances.items():
@@ -188,14 +219,9 @@ def generate_report(instances):
             elif metrics['cpu_avg'] < CPU_THRESHOLD:
                 underutilized = True
                 rec = get_recommendation(inst['InstanceType'])
-     
+            
             if isinstance(metrics['cpu_credit_avg'], float):
-                # 1. Round the float to 0 decimal places (e.g., 250.7 -> 251.0)
-                rounded_value = round(metrics['cpu_credit_avg'], 0)
-                # 2. Convert the float to an integer (e.g., 251.0 -> 251)
-                int_value = int(rounded_value)
-                # 3. Convert the integer to a string (e.g., 251 -> "251")
-                credits_str = str(int_value)
+                credits_str = str(int(round(metrics['cpu_credit_avg'], 0)))
             else:
                 credits_str = metrics['cpu_credit_avg']
 
@@ -203,7 +229,7 @@ def generate_report(instances):
                 data.append({
                     'InstanceId': inst['InstanceId'], 'Region': region,
                     'InstanceType': inst['InstanceType'], 'Name': inst['InstanceName'],
-                    'Avg.CPU%': f"{metrics['cpu_avg']:.2f}", 'Avg.CPUCredits': f"{metrics['cpu_credit_avg']}",
+                    'Avg.CPU%': f"{metrics['cpu_avg']:.2f}", 'Avg.CPUCredits': credits_str,
                     'Recommendation': rec
                 })
     return data
