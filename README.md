@@ -100,7 +100,7 @@ The goal is to securely store the Google key and package the required Python lib
     * On the local computer, open a terminal and run these commands:
 ```
 mkdir -p gspread_layer/python
-pip3 install gspread google-auth -t ./gspread_layer/python
+pip3 install gspread google-auth gspread-formatting -t ./gspread_layer/python
 cd gspread_layer && zip -r ../gspread_layer.zip .
 ```
     
