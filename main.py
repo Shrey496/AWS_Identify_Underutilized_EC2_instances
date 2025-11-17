@@ -84,10 +84,7 @@ def write_to_sheet(gc, report_data):
         header_end_cell = gspread.utils.rowcol_to_a1(1, num_cols)
         data_range = f"A1:{end_cell}"
         
-        # --- THIS IS THE FIX ---
-        # Use format_cell_range for the header, not worksheet.format
         format_cell_range(worksheet, f"A1:{header_end_cell}", header_format)
-        # --- END OF FIX ---
 
         format_cell_range(worksheet, data_range, all_cells_base_format)
 
