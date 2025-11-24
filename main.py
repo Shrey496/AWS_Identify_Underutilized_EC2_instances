@@ -1,11 +1,11 @@
 import boto3
 import collections
-import os
-import gspread 
-import gspread.utils 
-import json
-from gspread_formatting import *
-from google.oauth2.service_account import Credentials
+import os                             
+import gspread           #Interact with Google sheets
+import gspread.utils     #Helper to convert cell coordinates
+import json              #Used to parse Google credentials (service key)
+from gspread_formatting import *  #Apply colors, borders and formatting to the gsheet
+from google.oauth2.service_account import Credentials   #Authenticate to gcp using service account
 from datetime import datetime, timedelta, timezone
 
 # --- Configuration ---
