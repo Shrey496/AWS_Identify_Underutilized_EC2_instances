@@ -4,7 +4,7 @@
 
 #Ignore the terraform dependency directory along with tfstate file and it's backup
 .terraform/
-#.terraform.lock.hcl
+.terraform.lock.hcl
 *.tfstate
 *.tfstate.backup
 
